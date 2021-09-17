@@ -16,6 +16,7 @@ func writeData(s string, inp []byte) {
 		}
 	}()
 	f.Write([]byte(inp))
+	f.Sync()
 }
 
 func makeData(n int) []byte {
@@ -35,10 +36,11 @@ func readData(s string, n int) (int, []byte) {
 
 func main() {
 	mx := 1000000000
+	inp := makeData(mx)
 	st := time.Now()
-	x, _ := readData("output.txt", mx)
+	writeData("output.txt", inp)
 	d := time.Since(st)
-	fmt.Println("time taken ", d, x)
+	fmt.Println("time taken ", d)
 	tp := float64(mx) / d.Seconds()
 	fmt.Printf("through put is %2f MB/s", tp/(MB))
 }
