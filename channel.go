@@ -28,14 +28,13 @@ func B(c chan int, fin chan int) int {
 }
 
 func main() {
-	ch := make(chan int)
+	c := make(chan int)
 	fin := make(chan int, 2)
 	st := time.Now()
-	go A(ch, fin)
-	go B(ch, fin)
-	var x int
-	x = <-fin
-	x = <-fin
+	go A(c, fin)
+	go B(c, fin)
+	<-fin
+	<-fin
 	ed := time.Since(st)
-	fmt.Println(ed.Nanoseconds()/N, x)
+	fmt.Printf("Took %.2f seconds for %d nanoseconds per switch", ed.Seconds(), ed.Nanoseconds()/(2*N))
 }

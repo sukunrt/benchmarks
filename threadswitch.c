@@ -5,9 +5,6 @@
 
 int main()
 {
-    struct timeval tval_before, tval_after, tval_result;
-
-    gettimeofday(&tval_before, NULL);
     int f1[2], f2[2];
     int n = 1000000;
     pipe(f1);
@@ -20,6 +17,8 @@ int main()
             write(f2[1], &i, sizeof(i));
         }
     } else {
+        struct timeval tval_before, tval_after, tval_result;
+        gettimeofday(&tval_before, NULL);
         int i;
         for (i = 0; i < n; i++) {
             write(f1[1], &i, sizeof(i));
