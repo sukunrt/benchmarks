@@ -11,7 +11,12 @@ typedef struct pthread_barrier {
   size_t                  num;
 } pthread_barrier_t;
 
-int pthread_barrier_init(pthread_barrier_t *bar, int num)
+typedef struct pthread_barrier_attr {
+  int num;
+} pthread_barrierattr_t;
+
+
+int pthread_barrier_init(pthread_barrier_t *bar, pthread_barrierattr_t *attr, int num)
 {
   int ret = 0;
   if ((ret = pthread_mutex_init(&(bar->mutex), 0))) return ret;

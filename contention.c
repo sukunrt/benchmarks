@@ -4,7 +4,10 @@
 #include <unistd.h>
 
 #include "ntime.h"
+
+#if defined(__APPLE__)
 #include "utils.h"
+#endif
 
 #define N 200
 #define LOOP_NUM 20000000
@@ -41,7 +44,7 @@ int main() {
         int el = (int)(ed-st) / 1000000;
         printf("Took %d msecs with only 1 thread running\n", el);
 
-        pthread_barrier_init(&barrier, N);
+        pthread_barrier_init(&barrier, NULL, N);
         pthread_t threads[N];
         int i;
         for (i = 0; i < N; i++) {
