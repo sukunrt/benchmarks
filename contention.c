@@ -1,7 +1,10 @@
+#define _GNU_SOURCE 1
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <unistd.h>
+
+#include <sys/resource.h>
 
 #include "ntime.h"
 
@@ -32,6 +35,19 @@ void* threadLoopFunc(void* args) {
         uint64_t ed = get_time_in_nsecs();
         int el = (int) ((ed-st) / (uint64_t) 1000000);
         *(int *)args = el;
+
+	struct rusage r;
+	getrusage(RUSAGE_THREAD, &r);
+	printf("%ld %ld %d %ld\n", r.ru_nvcsw, r.ru_nivcsw, el, r.ru_utime.tv_sec * 1000 + r.ru_utime.tv_usec / 1000);
+
+	
+        st = get_time_in_nsecs();
+        loopFunc();
+        ed = get_time_in_nsecs();
+        el = (int) ((ed-st) / (uint64_t) 1000000);
+        *(int *)args = el;
+	getrusage(RUSAGE_THREAD, &r);
+	printf("%ld %ld %d %ld\n", r.ru_nvcsw, r.ru_nivcsw, el, r.ru_utime.tv_sec * 1000 + r.ru_utime.tv_usec / 1000);
         return NULL;
 }
 
@@ -57,7 +73,15 @@ int main() {
         for (i = 0; i < N; i++) {
                 total_msecs += thread_timings[i];
         }
-        printf("Took %d msecs with %d threads", total_msecs / N, N);
+	int mi = 1000000000;
+	int mx = 0;
+	for (i = 0; i < N; i++) {
+		if (thread_timings[i] > mx) mx = thread_timings[i];
+		if (thread_timings[i] < mi) mi = thread_timings[i];
+	}
+        printf("Took %d msecs with %d threads\n", total_msecs / N, N);
+	printf("Max %d msecs\n", mx);
+	printf("Min %d msecs\n", mi);
         return 0;
 }
 
