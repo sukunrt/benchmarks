@@ -6,19 +6,19 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
-	"time"
 	"syscall"
+	"time"
 )
 
 var s = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
-func fill_random_bytes(buf []byte) {
+func fillRandomBytes(buf []byte) {
 	for i := 0; i < len(buf); i++ {
 		buf[i] = byte('A')
 	}
 }
 
-func rand_string(n int) string {
+func randString(n int) string {
 	buf := make([]rune, n)
 	for i := 0; i < n; i++ {
 		buf[i] = s[rand.Intn(len(s))]
@@ -42,8 +42,8 @@ func formatDataSize(blockSize int) string {
 	}
 }
 
-func formatSpeed(bytesWritten int, timeNanos int) string {
-	bps := (bytesWritten * 1000 * 1000 * 1000) / timeNanos
+func formatSpeed(bytesWritten int, timeNanos time.Duration) string {
+	bps := (bytesWritten * 1000 * 1000 * 1000) / int(timeNanos)
 	kb := 1000
 	mb := 1000 * kb
 	gb := 1000 * mb
@@ -63,67 +63,76 @@ func getMillis(nanosecs int) float64 {
 	return float64(nanosecs) / float64(1000000)
 }
 
+func getNewOutputFile(len int) (*os.File, string) {
+	fName := "/media/d1/" + randString(len) + ".out"
+	f, err := os.Create((fName))
+	if err != nil {
+		panic(err)
+	}
+	return f, fName
+}
+
+func measureTime(blockSize, count int, f *os.File) time.Duration {
+	f.Seek(0, 0)
+	f.Sync()
+	buf := make([]byte, blockSize)
+	t := time.Duration(0)
+	for i := 0; i < count; i++ {
+		st := time.Now()
+		n, err := f.Write(buf)
+		if n != len(buf) || err != nil {
+			fmt.Println("error:", err)
+		}
+		syscall.Fdatasync(int(f.Fd()))
+		el := time.Since(st)
+		t = t + el
+	}
+	return t
+}
+
+func writeTest(blockSize, count int, f *os.File, fileName string, testName string, res chan string) {
+	el := measureTime(blockSize, count, f)
+	res <- fmt.Sprintf(`Test %s:
+Took %0.3f per write
+Write Speed: %s
+
+`, testName, float64(el)/float64(count*1e6), formatSpeed(count*blockSize, el))
+	f.Close()
+	os.Remove(fileName)
+}
+
 func writeBM(blockSize int) {
 	fmt.Printf("Starting write test for blockSize: %s\n\n", formatDataSize(blockSize))
 
-	iters := 1000
-	N := blockSize * iters
+	count := 1000
+	N := int64(1000 * 1000 * 1000)
+	f1, fn1 := getNewOutputFile(10)
+	buf := make([]byte, int(N))
+	f1.Write(buf[:])
+	f1.Sync()	
 
-	fName := rand_string(10) + ".out"
-	f, _ := os.Create(fName)
-	buf := make([]byte, N)
-	f.Write(buf[:])
-	buf = buf[:blockSize]
-	f.Sync()
-	f.Seek(0, 0)
-	timeSequential := 0
-	for i := 0; i < iters; i++ {
-		fill_random_bytes(buf)
-		st := time.Now()
-		n, err := f.Write(buf)
-		if n != len(buf) {
-			fmt.Println("error:", err)
-		}
-		if err != nil {
-			fmt.Println("write error: ", err)
-		}
-		syscall.Fdatasync(int(f.Fd()))
-		el := time.Since(st)
-		timeSequential += int(el.Nanoseconds())
-	}
-	fmt.Printf("Took %0.3f msecs per write\n", getMillis(timeSequential/iters))
-	fmt.Printf("Write Speed: %s\n\n", formatSpeed(iters*blockSize, timeSequential))
-	f.Close()
-	os.Remove(fName)
+	f2, fn2 := getNewOutputFile(10)
+	syscall.Fallocate(int(f2.Fd()), 0, 0, N)
 
-	fName = rand_string(10) + ".out"
-	f, _ = os.OpenFile(fName, os.O_WRONLY|os.O_CREATE, 0644)
-	st := time.Now()
-	syscall.Fallocate(int(f.Fd()), 0, 0, int64(10*N))
-	f.Sync()
-	f.Close()
-	f, _ = os.OpenFile(fName, os.O_WRONLY|os.O_CREATE, 0644)
-	ed := time.Since(st)
-	fmt.Println("took ", ed.Milliseconds())
-	timeSequentialAppend := 0
-	buf = buf[:blockSize]
-	for i := 0; i < iters; i++ {
-		fill_random_bytes(buf)
-		st := time.Now()
-		n, err := f.Write(buf)
-		if n != len(buf) {
-			fmt.Println("error:", err)
-		}
-		if err != nil {
-			fmt.Println("write error: ", err)
-		}
-		syscall.Fdatasync(int(f.Fd()))
-		el := time.Since(st)
-		timeSequentialAppend += int(el.Nanoseconds())
+
+	f3, fn3 := getNewOutputFile(10)
+	syscall.Fallocate(int(f3.Fd()), 0x1, 0, N)
+
+	f4, fn4 := getNewOutputFile(10)
+	syscall.Fallocate(int(f4.Fd()), 0x4, 0, N)
+	
+	f5, fn5 := getNewOutputFile(10)
+	f5.Truncate(N)
+	
+	ch := make(chan string, 0)
+	go writeTest(blockSize, count, f1, fn1, "zeroed_out", ch)
+	go writeTest(blockSize, count, f2, fn2, "fallocate_0", ch)
+	go writeTest(blockSize, count, f3, fn3, "fallocate_1", ch)
+	go writeTest(blockSize, count, f4, fn4, "fallocate_4", ch)
+	go writeTest(blockSize, count, f5, fn5, "truncate", ch)
+	for i := 0; i < 5; i++ {
+		fmt.Printf("%s", <- ch)
 	}
-	fmt.Printf("Took %0.3f msecs per write\n", getMillis(timeSequentialAppend/iters))
-	fmt.Printf("Write Speed: %s\n\n", formatSpeed(iters*blockSize, timeSequentialAppend))
-	f.Close()
 }
 
 func main() {
@@ -134,4 +143,5 @@ func main() {
 	fmt.Scanf("%d", &blockSize)
 	writeBM(blockSize)
 }
+
 
