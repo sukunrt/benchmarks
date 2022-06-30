@@ -64,7 +64,7 @@ func getMillis(nanosecs int) float64 {
 }
 
 func getNewOutputFile(len int) (*os.File, string) {
-	fName := "/media/d1/" + randString(len) + ".out"
+	fName := randString(len) + ".out"
 	f, err := os.Create((fName))
 	if err != nil {
 		panic(err)
@@ -84,6 +84,7 @@ func measureTime(blockSize, count int, f *os.File) time.Duration {
 			fmt.Println("error:", err)
 		}
 		syscall.Fdatasync(int(f.Fd()))
+		//f.Sync()
 		el := time.Since(st)
 		t = t + el
 	}
@@ -98,39 +99,36 @@ Write Speed: %s
 
 `, testName, float64(el)/float64(count*1e6), formatSpeed(count*blockSize, el))
 	f.Close()
-	os.Remove(fileName)
+	//os.Remove(fileName)
 }
 
 func writeBM(blockSize int) {
 	fmt.Printf("Starting write test for blockSize: %s\n\n", formatDataSize(blockSize))
 
 	count := 1000
-	N := int64(1000 * 1000 * 1000)
-	f1, fn1 := getNewOutputFile(10)
-	buf := make([]byte, int(N))
-	f1.Write(buf[:])
-	f1.Sync()	
+	N := int64(400 * 1000 * 1000)
+	// f1, fn1 := getNewOutputFile(10)
+	//buf := make([]byte, int(N))
+	// f1.Write(buf[:])
+	// f1.Sync()	
 
 	f2, fn2 := getNewOutputFile(10)
-	syscall.Fallocate(int(f2.Fd()), 0, 0, N)
-
-
+	err := syscall.Fallocate(int(f2.Fd()), 0, 0, N)
+	if err != nil {
+		panic(err)
+	}
+	
+	fn1 := "dd.out"
+	f1, _ := os.OpenFile(fn1, os.O_WRONLY, 0644)
+	
 	f3, fn3 := getNewOutputFile(10)
-	syscall.Fallocate(int(f3.Fd()), 0x1, 0, N)
+	
 
-	f4, fn4 := getNewOutputFile(10)
-	syscall.Fallocate(int(f4.Fd()), 0x4, 0, N)
-	
-	f5, fn5 := getNewOutputFile(10)
-	f5.Truncate(N)
-	
-	ch := make(chan string, 0)
-	go writeTest(blockSize, count, f1, fn1, "zeroed_out", ch)
-	go writeTest(blockSize, count, f2, fn2, "fallocate_0", ch)
-	go writeTest(blockSize, count, f3, fn3, "fallocate_1", ch)
-	go writeTest(blockSize, count, f4, fn4, "fallocate_4", ch)
-	go writeTest(blockSize, count, f5, fn5, "truncate", ch)
-	for i := 0; i < 5; i++ {
+	ch := make(chan string, 3)
+	writeTest(blockSize, count, f1, fn1, "zeroed_out", ch)
+	writeTest(blockSize, count, f2, fn2, "fallocate_0", ch)
+	writeTest(blockSize, count, f3, fn3, "unallocated", ch)
+	for i := 0; i < 3; i++ {
 		fmt.Printf("%s", <- ch)
 	}
 }
